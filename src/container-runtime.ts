@@ -11,8 +11,24 @@ import { logger } from './logger.js';
 /** The container runtime binary name. */
 export const CONTAINER_RUNTIME_BIN = 'container';
 
-/** Hostname containers use to reach the host machine. */
-export const CONTAINER_HOST_GATEWAY = 'host.docker.internal';
+/** Hostname/IP containers use to reach the host machine. */
+export const CONTAINER_HOST_GATEWAY = detectHostGateway();
+
+function detectHostGateway(): string {
+  // Apple Container doesn't support host.docker.internal.
+  // Containers reach the host via the bridge gateway (192.168.64.1).
+  if (CONTAINER_RUNTIME_BIN === 'container' && os.platform() === 'darwin') {
+    try {
+      const output = execSync(
+        `${CONTAINER_RUNTIME_BIN} run --rm alpine ip route show default`,
+        { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8', timeout: 10000 },
+      );
+      const match = output.match(/via\s+(\d+\.\d+\.\d+\.\d+)/);
+      if (match) return match[1];
+    } catch { /* fall through */ }
+  }
+  return 'host.docker.internal';
+}
 
 /**
  * Address the credential proxy binds to.
@@ -24,6 +40,10 @@ export const PROXY_BIND_HOST =
   process.env.CREDENTIAL_PROXY_HOST || detectProxyBindHost();
 
 function detectProxyBindHost(): string {
+  // Apple Container uses a bridge network — proxy must be reachable from 192.168.64.x
+  if (os.platform() === 'darwin' && CONTAINER_RUNTIME_BIN === 'container') {
+    return '0.0.0.0';
+  }
   if (os.platform() === 'darwin') return '127.0.0.1';
 
   // WSL uses Docker Desktop (same VM routing as macOS) — loopback is correct.
