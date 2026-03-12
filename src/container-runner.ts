@@ -16,6 +16,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -206,6 +207,15 @@ function buildVolumeMounts(
   return mounts;
 }
 
+/**
+ * Read secrets from .env that need to be passed to the container.
+ * These are non-Anthropic credentials that tools inside the container need directly
+ * (e.g., gh CLI needs GITHUB_TOKEN as a real env var, not proxied).
+ */
+function readSecrets(): Record<string, string> {
+  return readEnvFile(['GITHUB_TOKEN', 'GH_REPO']);
+}
+
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
@@ -231,6 +241,12 @@ function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+
+  // Pass non-Anthropic secrets as env vars (e.g., GITHUB_TOKEN for gh CLI)
+  const secrets = readSecrets();
+  for (const [key, value] of Object.entries(secrets)) {
+    args.push('-e', `${key}=${value}`);
   }
 
   // Runtime-specific args for host gateway resolution
