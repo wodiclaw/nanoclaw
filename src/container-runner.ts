@@ -182,6 +182,15 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Shared folder for host↔container data exchange (all groups)
+  const sharedDir = path.join(DATA_DIR, 'shared');
+  fs.mkdirSync(sharedDir, { recursive: true });
+  mounts.push({
+    hostPath: sharedDir,
+    containerPath: '/workspace/shared',
+    readonly: false,
+  });
+
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.
